@@ -1,8 +1,13 @@
 import streamlit as st
 import base64
 import requests
-from mistralai import Mistral
 from io import BytesIO
+
+try:
+    from mistralai import Mistral
+except ImportError:
+    st.error("Mistralai module is not installed. Please install it using `pip install mistralai`.")
+    st.stop()
 
 # Streamlit Page Config
 st.set_page_config(page_title="Mistral OCR Web App", page_icon="📄", layout="centered")
@@ -41,48 +46,51 @@ if process_btn:
     if not api_key:
         st.error("Please enter your API key")
     else:
-        client = Mistral(api_key=api_key)
-        document = {}
-        preview_src = None
-        
-        if source_type == "URL":
-            if not input_url:
-                st.error("Please enter a valid URL")
-            else:
-                document = {"type": "document_url", "document_url": input_url} if file_type == "PDF" else {"type": "image_url", "image_url": input_url}
-                preview_src = input_url
-        else:
-            if not uploaded_file:
-                st.error("Please upload a file")
-            else:
-                file_bytes = uploaded_file.getvalue()
-                encoded = base64.b64encode(file_bytes).decode("utf-8")
-                document = {"type": "document_base64", "document_base64": encoded} if file_type == "PDF" else {"type": "image_url", "image_url": f"data:image/jpeg;base64,{encoded}"}
-                preview_src = file_bytes
-        
-        # Perform OCR
-        with st.spinner("Processing document..."):
-            try:
-                ocr_response = client.ocr.process(
-                    model="mistral-ocr-latest",
-                    document=document,
-                    include_image_base64=True
-                )
-                pages = ocr_response.pages if hasattr(ocr_response, "pages") else []
-                ocr_result = "\n\n".join(page.markdown for page in pages) or "No result found"
-                
-                # Display Preview
-                if file_type == "PDF":
-                    st.write("### Document Preview")
-                    st.write("(URL preview not available for PDFs)")
+        try:
+            client = Mistral(api_key=api_key)
+            document = {}
+            preview_src = None
+            
+            if source_type == "URL":
+                if not input_url:
+                    st.error("Please enter a valid URL")
                 else:
-                    st.image(preview_src, caption="Uploaded Image", use_column_width=True)
-                
-                st.write("### OCR Result:")
-                st.text_area("Extracted Text", ocr_result, height=250)
-                
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+                    document = {"type": "document_url", "document_url": input_url} if file_type == "PDF" else {"type": "image_url", "image_url": input_url}
+                    preview_src = input_url
+            else:
+                if not uploaded_file:
+                    st.error("Please upload a file")
+                else:
+                    file_bytes = uploaded_file.getvalue()
+                    encoded = base64.b64encode(file_bytes).decode("utf-8")
+                    document = {"type": "document_base64", "document_base64": encoded} if file_type == "PDF" else {"type": "image_url", "image_url": f"data:image/jpeg;base64,{encoded}"}
+                    preview_src = file_bytes
+            
+            # Perform OCR
+            with st.spinner("Processing document..."):
+                try:
+                    ocr_response = client.ocr.process(
+                        model="mistral-ocr-latest",
+                        document=document,
+                        include_image_base64=True
+                    )
+                    pages = ocr_response.pages if hasattr(ocr_response, "pages") else []
+                    ocr_result = "\n\n".join(page.markdown for page in pages) or "No result found"
+                    
+                    # Display Preview
+                    if file_type == "PDF":
+                        st.write("### Document Preview")
+                        st.write("(URL preview not available for PDFs)")
+                    else:
+                        st.image(preview_src, caption="Uploaded Image", use_column_width=True)
+                    
+                    st.write("### OCR Result:")
+                    st.text_area("Extracted Text", ocr_result, height=250)
+                    
+                except Exception as e:
+                    st.error(f"Error processing OCR: {str(e)}")
+        except Exception as e:
+            st.error(f"Error initializing Mistral client: {str(e)}")
 
 # Translate Button
 if st.button("Translate to English"):
