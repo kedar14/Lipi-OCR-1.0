@@ -3,14 +3,17 @@ import base64
 import requests
 from io import BytesIO
 import subprocess
+import sys
 
 # Ensure mistralai is installed
 try:
-    from mistralai import Mistral
+    import mistralai
 except ImportError:
     st.warning("Mistralai module is not installed. Installing now...")
-    subprocess.run(["pip", "install", "mistralai"], check=True)
-    from mistralai import Mistral
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "mistralai"])
+    import mistralai
+
+from mistralai import Mistral
 
 # Streamlit Page Config
 st.set_page_config(page_title="Mistral OCR Web App", page_icon="📄", layout="centered")
