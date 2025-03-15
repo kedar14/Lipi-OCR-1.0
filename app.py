@@ -109,50 +109,33 @@ if "ocr_result" in st.session_state:
 
     if action == "🔧 Refine Input Text":
         if st.button("🔧 Refine Text Now"):
-            try:
-                client = st.session_state["client"]
-                with st.spinner("🛠 Refining OCR Text..."):
-                    response = client.chat.complete(
-                        model="mistral-large-latest",
-                        messages=[{"role": "user", "content": f"Improve the structure and readability of the following text in its original language without translating it:\n\n{st.session_state['ocr_result']}"}],
-                    )
-                    refined_text = response.choices[0].message.content
+            with st.spinner("🛠 Refining OCR Text..."):
+                response = client.chat.complete(
+                    model="mistral-large-latest",
+                    messages=[{"role": "user", "content": f"Improve the structure and readability of the following text in its original language without translating it:\n\n{st.session_state['ocr_result']}"}],
+                )
+                st.session_state["refined_text"] = response.choices[0].message.content
 
-                st.session_state["refined_text"] = refined_text
-                st.markdown("<div class='success-box'><h3>📑 Refined OCR Text:</h3><pre>" + refined_text + "</pre></div>", unsafe_allow_html=True)
-
-            except Exception as e:
-                st.markdown(f"<div class='error-box'>❌ Refinement error: {str(e)}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='success-box'><h3>📑 Refined OCR Text:</h3><pre>" + st.session_state["refined_text"] + "</pre></div>", unsafe_allow_html=True)
 
     if action == "🌎 Translate to English":
         if st.button("🌎 Translate Now"):
-            try:
-                client = st.session_state["client"]
-                with st.spinner("🔄 Translating..."):
-                    response = client.chat.complete(
-                        model="mistral-large-latest",
-                        messages=[{"role": "user", "content": f"Translate the following text to English:\n\n{st.session_state['ocr_result']}"}],
-                    )
-                    translated_text = response.choices[0].message.content
+            with st.spinner("🔄 Translating..."):
+                response = client.chat.complete(
+                    model="mistral-large-latest",
+                    messages=[{"role": "user", "content": f"Translate the following text to English:\n\n{st.session_state['ocr_result']}"}],
+                )
+                st.session_state["translated_text"] = response.choices[0].message.content
 
-                st.session_state["translated_text"] = translated_text
-                st.markdown("<div class='success-box'><h3>🌍 Translated Text:</h3><pre>" + translated_text + "</pre></div>", unsafe_allow_html=True)
-
-            except Exception as e:
-                st.markdown(f"<div class='error-box'>❌ Translation error: {str(e)}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='success-box'><h3>🌍 Translated Text:</h3><pre>" + st.session_state["translated_text"] + "</pre></div>", unsafe_allow_html=True)
 
 # ---- Advanced Process (Summarize in 5 Points) ----
 if "translated_text" in st.session_state and st.button("⚡ Advanced Process"):
-    try:
-        client = st.session_state["client"]
-        with st.spinner("🔄 Summarizing text into key points..."):
-            response = client.chat.complete(
-                model="mistral-large-latest",
-                messages=[{"role": "user", "content": f"Summarize the following translated text into 5 key bullet points:\n\n{st.session_state['translated_text']}"}],
-            )
-            summary_text = response.choices[0].message.content
+    with st.spinner("🔄 Summarizing text into key points..."):
+        response = client.chat.complete(
+            model="mistral-large-latest",
+            messages=[{"role": "user", "content": f"Summarize the following translated text into 5 key bullet points:\n\n{st.session_state['translated_text']}"}],
+        )
+        st.session_state["summary_text"] = response.choices[0].message.content
 
-        st.markdown("<div class='success-box'><h3>📌 Key Takeaways:</h3><pre>" + summary_text + "</pre></div>", unsafe_allow_html=True)
-
-    except Exception as e:
-        st.markdown(f"<div class='error-box'>❌ Summary error: {str(e)}</div>", unsafe_allow_html=True)
+    st.markdown("<div class='success-box'><h3>📌 Key Takeaways:</h3><pre>" + st.session_state["summary_text"] + "</pre></div>", unsafe_allow_html=True)
