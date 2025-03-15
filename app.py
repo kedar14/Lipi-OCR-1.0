@@ -1,4 +1,3 @@
-streamlit run app.py
 import base64
 import re
 from io import BytesIO
