@@ -1,117 +1,159 @@
-import streamlit as st
 import base64
-import requests
+import re
 from io import BytesIO
-import os
+from PIL import Image as PILImage
+import streamlit as st
+from mistralai import Mistral
 
-# Ensure mistralai is installed
-try:
-    from mistralai import Mistral
-except ImportError:
-    st.warning("Mistralai module is not installed. Installing now...")
-    os.system("pip install mistralai")
-    try:
-        from mistralai import Mistral
-    except ImportError:
-        st.error("Failed to install mistralai. Please restart the app.")
-        st.stop()
+# ---- Web App Configuration ----
+st.set_page_config(page_title="Mistral OCR & Translation Tool", page_icon="📄", layout="centered")
 
-# Streamlit Page Config
-st.set_page_config(page_title="Mistral OCR Web App", page_icon="📄", layout="centered")
+# ---- Custom Styles (Ancient Yellow Background) ----
+st.markdown("""
+    <style>
+    .stApp { background-color: #FAE6A2; } /* Ancient Yellow */
+    .main { text-align: center; }
+    .big-font { font-size:20px !important; font-weight: bold; }
+    .success-box { border: 2px solid green; padding: 10px; background-color: #e6ffe6; border-radius: 5px; }
+    .error-box { border: 2px solid red; padding: 10px; background-color: #ffe6e6; border-radius: 5px; }
+    </style>
+""", unsafe_allow_html=True)
 
-# Title
-st.title("📄 Mistral OCR Web App")
+# ---- Sidebar Inputs ----
+st.sidebar.header("🔑 API Configuration")
 
-# API Key Input
-api_key = st.text_input("Enter your Mistral API Key", type="password")
+# Persistent API Key Storage
+if "api_key" not in st.session_state:
+    st.session_state["api_key"] = ""
 
-# File Type Selection
-file_type = st.radio("Select File Type", ["PDF", "Image"], horizontal=True)
+api_key = st.sidebar.text_input("Enter Mistral API Key", type="password", value=st.session_state["api_key"])
 
-# Source Type Selection
-source_type = st.radio("Select Source", ["URL", "Local Upload"], horizontal=True)
+if st.sidebar.button("💾 Save API Key"):
+    st.session_state["api_key"] = api_key
+    st.success("✅ API Key saved for this session!")
 
-# URL Input
-input_url = ""
+# Auto-initialize Mistral Client
+if "client" not in st.session_state and api_key:
+    st.session_state["client"] = Mistral(api_key=api_key)
+
+st.sidebar.header("📁 File & Source Selection")
+file_type = st.sidebar.radio("Select File Type", ["PDF", "Image"])
+source_type = st.sidebar.radio("Choose Input Source", ["URL", "Local Upload"])
+
+# ---- Main Header ----
+st.markdown("<h1 class='main big-font'>📄 Mistral OCR & Translation Tool</h1>", unsafe_allow_html=True)
+
+# ---- OCR Input Handling ----
 if source_type == "URL":
     input_url = st.text_input("Enter File URL")
+    uploaded_file = None
+else:
+    input_url = None
+    uploaded_file = st.file_uploader("Upload File", type=["png", "jpg", "jpeg", "gif", "bmp", "pdf"])
 
-# File Upload
-uploaded_file = None
-if source_type == "Local Upload":
-    uploaded_file = st.file_uploader("Upload your file", type=["pdf", "png", "jpg", "jpeg"])
-
-# Process Button
-process_btn = st.button("Process Document")
-
-# Initialize Variables
-ocr_result = ""
-translated_text = ""
-
-# Process File Function
-if process_btn:
-    if not api_key:
-        st.error("Please enter your API key")
+# ---- Process Button ----
+if st.button("🚀 Process Document"):
+    if not st.session_state["api_key"]:
+        st.markdown("<div class='error-box'>❌ Please enter and save a valid API Key.</div>", unsafe_allow_html=True)
+    elif source_type == "URL" and not input_url:
+        st.markdown("<div class='error-box'>❌ Please enter a valid URL.</div>", unsafe_allow_html=True)
+    elif source_type == "Local Upload" and uploaded_file is None:
+        st.markdown("<div class='error-box'>❌ Please upload a valid file.</div>", unsafe_allow_html=True)
     else:
         try:
-            client = Mistral(api_key=api_key)
-            document = {}
-            preview_src = None
-            
-            if source_type == "URL":
-                if not input_url:
-                    st.error("Please enter a valid URL")
-                else:
-                    document = {"type": "document_url", "document_url": input_url} if file_type == "PDF" else {"type": "image_url", "image_url": input_url}
-                    preview_src = input_url
-            else:
-                if not uploaded_file:
-                    st.error("Please upload a file")
-                else:
-                    file_bytes = uploaded_file.getvalue()
-                    encoded = base64.b64encode(file_bytes).decode("utf-8")
-                    document = {"type": "document_base64", "document_base64": encoded} if file_type == "PDF" else {"type": "image_url", "image_url": f"data:image/jpeg;base64,{encoded}"}
-                    preview_src = file_bytes
-            
-            # Perform OCR
-            with st.spinner("Processing document..."):
-                try:
-                    ocr_response = client.ocr.process(
-                        model="mistral-ocr-latest",
-                        document=document,
-                        include_image_base64=True
-                    )
-                    pages = ocr_response.pages if hasattr(ocr_response, "pages") else []
-                    ocr_result = "\n\n".join(page.markdown for page in pages) or "No result found"
-                    
-                    # Display Preview
-                    if file_type == "PDF":
-                        st.write("### Document Preview")
-                        st.write("(URL preview not available for PDFs)")
-                    else:
-                        st.image(preview_src, caption="Uploaded Image", use_column_width=True)
-                    
-                    st.write("### OCR Result:")
-                    st.text_area("Extracted Text", ocr_result, height=250)
-                    
-                except Exception as e:
-                    st.error(f"Error processing OCR: {str(e)}")
-        except Exception as e:
-            st.error(f"Error initializing Mistral client: {str(e)}")
+            client = st.session_state["client"]
 
-# Translate Button
-if st.button("Translate to English"):
-    if not ocr_result:
-        st.error("No text to translate")
-    else:
-        with st.spinner("Translating..."):
-            try:
-                response = client.chat(
-                    model="mistral-large-latest",
-                    messages=[{"role": "user", "content": f"Translate the following to English:\n\n{ocr_result}"}]
+            # Handle Input Source
+            if source_type == "URL":
+                document = {"type": "document_url", "document_url": input_url} if file_type == "PDF" else {
+                    "type": "image_url",
+                    "image_url": input_url,
+                }
+            else:
+                file_bytes = uploaded_file.read()
+                encoded_file = base64.b64encode(file_bytes).decode("utf-8")
+
+                if file_type == "PDF":
+                    document = {"type": "document_url", "document_url": f"data:application/pdf;base64,{encoded_file}"}
+                else:
+                    img = PILImage.open(BytesIO(file_bytes))
+                    format = img.format.lower()
+                    if format not in ["jpeg", "png", "bmp", "gif"]:
+                        st.markdown("<div class='error-box'>❌ Unsupported image format.</div>", unsafe_allow_html=True)
+                        st.stop()
+                    mime_type = f"image/{format}"
+                    document = {"type": "image_url", "image_url": f"data:{mime_type};base64,{encoded_file}"}
+
+            # Perform OCR
+            with st.spinner("🔍 Processing document..."):
+                ocr_response = client.ocr.process(
+                    model="mistral-ocr-latest",
+                    document=document,
+                    include_image_base64=True,
                 )
-                translated_text = response.choices[0].message.content
-                st.write("### Translated Text:")
-                st.text_area("Translation", translated_text, height=250)
+                pages = ocr_response.pages if hasattr(ocr_response, "pages") else []
+                ocr_result = "\n\n".join(page.markdown for page in pages) or "⚠️ No result found"
+
+            # Store OCR result
+            st.session_state["ocr_result"] = ocr_result
+
+            # Display OCR Result
+            st.markdown("<div class='success-box'><h3>📃 OCR Result:</h3><pre>" + ocr_result + "</pre></div>", unsafe_allow_html=True)
+
+        except Exception as e:
+            st.markdown(f"<div class='error-box'>❌ Error: {str(e)}</div>", unsafe_allow_html=True)
+
+# ---- Options After OCR ----
+if "ocr_result" in st.session_state:
+    action = st.radio("What would you like to do next?", ["🔧 Refine Input Text", "🌎 Translate to English"])
+
+    if action == "🔧 Refine Input Text":
+        if st.button("🔧 Refine Text Now"):
+            try:
+                client = st.session_state["client"]
+                with st.spinner("🛠 Refining OCR Text..."):
+                    response = client.chat.complete(
+                        model="mistral-large-latest",
+                        messages=[{"role": "user", "content": f"Improve the structure and readability of the following text in its original language without translating it:\n\n{st.session_state['ocr_result']}"}],
+                    )
+                    refined_text = response.choices[0].message.content
+
+                st.session_state["refined_text"] = refined_text
+                st.markdown("<div class='success-box'><h3>📑 Refined OCR Text:</h3><pre>" + refined_text + "</pre></div>", unsafe_allow_html=True)
+
             except Exception as e:
-                st.error(f"Translation error: {str(e)}")
+                st.markdown(f"<div class='error-box'>❌ Refinement error: {str(e)}</div>", unsafe_allow_html=True)
+
+    if action == "🌎 Translate to English":
+        if st.button("🌎 Translate Now"):
+            try:
+                client = st.session_state["client"]
+                with st.spinner("🔄 Translating..."):
+                    response = client.chat.complete(
+                        model="mistral-large-latest",
+                        messages=[{"role": "user", "content": f"Translate the following text to English:\n\n{st.session_state['ocr_result']}"}],
+                    )
+                    translated_text = response.choices[0].message.content
+
+                st.session_state["translated_text"] = translated_text
+                st.markdown("<div class='success-box'><h3>🌍 Translated Text:</h3><pre>" + translated_text + "</pre></div>", unsafe_allow_html=True)
+
+            except Exception as e:
+                st.markdown(f"<div class='error-box'>❌ Translation error: {str(e)}</div>", unsafe_allow_html=True)
+
+# ---- Advanced Process (Summarize in 5 Points) ----
+if "translated_text" in st.session_state and st.button("⚡ Advanced Process"):
+    try:
+        client = st.session_state["client"]
+        with st.spinner("🔄 Summarizing text into key points..."):
+            response = client.chat.complete(
+                model="mistral-large-latest",
+                messages=[{"role": "user", "content": f"Summarize the following translated text into 5 key bullet points:\n\n{st.session_state['translated_text']}"}],
+            )
+            summary_text = response.choices[0].message.content
+
+        st.markdown("<div class='success-box'><h3>📌 Key Takeaways:</h3><pre>" + summary_text + "</pre></div>", unsafe_allow_html=True)
+
+    except Exception as e:
+        st.markdown(f"<div class='error-box'>❌ Summary error: {str(e)}</div>", unsafe_allow_html=True)
+
