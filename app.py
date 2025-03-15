@@ -1,3 +1,4 @@
+streamlit run app.py
 import base64
 import re
 from io import BytesIO
@@ -156,4 +157,3 @@ if "translated_text" in st.session_state and st.button("⚡ Advanced Process"):
 
     except Exception as e:
         st.markdown(f"<div class='error-box'>❌ Summary error: {str(e)}</div>", unsafe_allow_html=True)
-
